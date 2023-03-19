@@ -12,7 +12,7 @@ model = LinearRegression()
 model.fit(X, y)
 
 
-def predict_visitors_with_populatuion(population):
+def predict_visitors_with_population(population):
     prediction = model.predict([[int(population)]])
     print({"pop": int(population), "vis": int(prediction[0][0])})
     return int(prediction[0][0])

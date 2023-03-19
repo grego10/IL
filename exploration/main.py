@@ -1,17 +1,13 @@
-import json
-import requests
 from bs4 import BeautifulSoup
-
-import pandas as pd
-
-import os
-
+from sklearn.linear_model import LinearRegression
 from dotenv import load_dotenv
 
-import numpy as np
-from sklearn.linear_model import LinearRegression
-
+import json
 import matplotlib.pyplot as plt
+import numpy as np
+import os
+import pandas as pd
+import requests
 
 
 def extract_museum():
@@ -59,22 +55,21 @@ def extract_museum():
 
 def filter_museum_and_get_cities():
     df = pd.read_csv("museums.csv")
-    # filter the dataframe to keep only museums with more than 2,000,000 visitors
+    # Filter the dataframe to keep only museums with more than 2,000,000 visitors
     df_filtered = df[df["Visitors"] > 2000000]
     df_filtered.to_csv("museum_filtered.csv", index=False)
 
     cities = df_filtered["City"].unique()
 
-    # create a new dataframe with the unique cities
+    # Create a new dataframe with the unique cities
     city_df = pd.DataFrame({"City": cities})
 
-    # print the city dataframe
+    # Save the city dataframe
     city_df.to_csv("cities.csv", index=False)
 
 
 def get_city_population():
     load_dotenv()
-    os.getenv("API_NINJA")
 
     df = pd.read_csv("cities.csv")
     df["Population"] = np.nan
@@ -111,9 +106,10 @@ def predict_visitors_with_populatuion(populaton):
     model = LinearRegression()
     model.fit(X, y)
 
-    # Make a prediction for a city with a population of 10 million
+    # Make a prediction for a city with a given population
     prediction = model.predict([[populaton]])
     print(prediction)
+    return prediction
 
 
 def predict_visitors_csv():
