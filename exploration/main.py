@@ -8,9 +8,10 @@ import numpy as np
 import os
 import pandas as pd
 import requests
+import pickle
 
 
-def extract_museum():
+def raw_museum():
     # Set the URL for the Wikipedia API
     url = "https://en.wikipedia.org/w/api.php"
 
@@ -26,10 +27,18 @@ def extract_museum():
     # Send the API request and get the response
     response = requests.get(url, params=params).json()
     html = response["parse"]["text"]["*"]
+    with open("1_raw_museum.html", "w") as f:
+        f.write(html)
 
-    soup = BeautifulSoup(html, "html.parser")
+    f.close()
+
+
+def intermediate_museum():
+    with open("1_raw_museum.html") as html:
+        soup = BeautifulSoup(html, "html.parser")
+
     table_rows = soup.find_all("tr")
-
+    html.close()
     # Loop through each table row nad parse it
     output = []
     for row in table_rows:
@@ -50,91 +59,91 @@ def extract_museum():
     df = pd.DataFrame(output)
     df["Visitors"] = df["Visitors"].str.replace(r"\[.*\]", "", regex=True)
     df["Visitors"] = df["Visitors"].str.replace(",", "").astype(int)
-    df.to_csv("museums.csv", index=False)
+    df.to_csv("2_intermediate_museums.csv", index=False)
 
 
-def filter_museum_and_get_cities():
-    df = pd.read_csv("museums.csv")
-    # Filter the dataframe to keep only museums with more than 2,000,000 visitors
-    df_filtered = df[df["Visitors"] > 2000000]
-    df_filtered.to_csv("museum_filtered.csv", index=False)
+def raw_cities():
+    load_dotenv()
+    df = pd.read_csv("2_intermediate_museums.csv")
 
-    cities = df_filtered["City"].unique()
+    cities = df["City"].unique()
 
     # Create a new dataframe with the unique cities
     city_df = pd.DataFrame({"City": cities})
 
-    # Save the city dataframe
-    city_df.to_csv("cities.csv", index=False)
-
-
-def get_city_population():
-    load_dotenv()
-
-    df = pd.read_csv("cities.csv")
-    df["Population"] = np.nan
-    for index, row in df.iterrows():
+    city_df["Population"] = np.nan
+    print(city_df)
+    for index, row in city_df.iterrows():
         name = row[0].split(",")[0]
         api_url = "https://api.api-ninjas.com/v1/city?name={}".format(name)
         response = requests.get(api_url, headers={"X-Api-Key": os.getenv("API_NINJA")})
         res = json.loads(response.text)
-        if response.status_code == requests.codes.ok and res[0]["name"] == name:
-            df.loc[df["City"] == row[0], "Population"] = res[0]["population"]
+        print(response.status_code)
+        print(res)
+        if response.status_code == 200 and len(res) > 0 and res[0]["name"] == name:
+            city_df.loc[city_df["City"] == row[0], "Population"] = res[0]["population"]
         else:
-            print("Error", name)
+            print("error: ", name)
 
-    df.to_csv("cities_population.csv", index=False)
+    city_df.to_csv("1_raw_cities.csv", index=False)
 
 
-def get_visitors_per_population():
-    museum_data = pd.read_csv("museum_filtered.csv")
-    population_data = pd.read_csv("cities_population.csv")
+def primary_museum_cities():
+    df_museum = pd.read_csv("2_intermediate_museums.csv")
+    df_cities = pd.read_csv("1_raw_cities.csv")
 
-    merged_data = pd.merge(museum_data, population_data, on="City")
+    merged_data = pd.merge(df_museum, df_cities, on="City")
 
     merged_data[["Museum", "City", "Population", "Visitors"]].to_csv(
-        "population_visitors.csv", index=False
+        "3_primary_museum_city.csv", index=False
     )
 
 
-def predict_visitors_with_populatuion(populaton):
-    data = pd.read_csv("population_visitors.csv")
+def feature_visitor_population():
+    df = pd.read_csv("3_primary_museum_city.csv")
+    # Filter the dataframe to keep only museums with more than 2,000,000 visitors
+    df_filtered = df[df["Visitors"] > 2000000]
+    df_filtered.to_csv("4_feature_visitor_population.csv", index=False)
+
+
+def model_visitor_population():
+    data = pd.read_csv("4_feature_visitor_population.csv")
     X = data["Population"].values.reshape(-1, 1)
     y = data["Visitors"].values.reshape(-1, 1)
 
     # Create a LinearRegression model and fit it to the data
     model = LinearRegression()
     model.fit(X, y)
+    pickle.dump(model, open("5_model_linear_regression", "wb"))
 
-    # Make a prediction for a city with a given population
-    prediction = model.predict([[populaton]])
+
+def output_visitors_pop(pop):
+    loaded_model = pickle.load(open("5_model_linear_regression", "rb"))
+    prediction = int(loaded_model.predict([[pop]])[0][0])
     print(prediction)
     return prediction
 
 
-def predict_visitors_csv():
+def output_visitors_pop_csv():
     data = pd.read_csv("population_visitors.csv")
 
     # Extract the features (population) and target (visitors) variables
     X = data["Population"].values.reshape(-1, 1)
-    y = data["Visitors"].values.reshape(-1, 1)
 
-    # Create a LinearRegression model and fit it to the data
-    model = LinearRegression()
-    model.fit(X, y)
+    loaded_model = pickle.load(open("5_model_linear_regression", "rb"))
 
     # Make predictions based on population
-    predictions = model.predict(X)
+    predictions = loaded_model.predict(X)
 
     # Add the predicted visitors column to the DataFrame
     data["Predicted_Visitors"] = predictions
 
     # Save the updated DataFrame to a new CSV file
-    data.to_csv("predicted_visitors.csv", index=False)
+    data.to_csv("6_output_visitors_pop.csv", index=False)
 
 
 def bar_chart_actual_vs_predicted_visitors():
-    df = pd.read_csv("predicted_visitors.csv")
+    df = pd.read_csv("6_output_visitors_pop.csv")
     # create a figure and axis object
     fig, ax = plt.subplots(figsize=(20, 6))
 
@@ -173,7 +182,7 @@ def bar_chart_actual_vs_predicted_visitors():
 
 
 def sacatter_plot_actual_vs_predicted_visitors():
-    df = pd.read_csv("predicted_visitors.csv")
+    df = pd.read_csv("6_output_visitors_pop.csv")
 
     fig, ax = plt.subplots(figsize=(10, 6))
 
@@ -197,11 +206,14 @@ def sacatter_plot_actual_vs_predicted_visitors():
 
 
 if __name__ == "__main__":
-    # extract_museum()
-    # filter_museum_and_get_cities()
-    # get_city_population()
-    # get_visitors_per_population()
-    # predict_visitors_with_populatuion(1000000)
-    # predict_visitors_csv()
+    # raw_museum()
+    # intermediate_museum()
+    # primary_museum()
+    # raw_cities()
+    # primary_museum_cities()
+    # feature_visitor_population()
+    # model_visitor_population()
+    # output_visitors_pop(10000000)
+    # output_visitors_pop_csv()
     # bar_chart_actual_vs_predicted_visitors()
     sacatter_plot_actual_vs_predicted_visitors()

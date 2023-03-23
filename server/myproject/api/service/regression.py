@@ -1,15 +1,9 @@
 import pandas as pd
 
-from sklearn.linear_model import LinearRegression
+import pickle
 
 
-data = pd.read_csv("api/service/population_visitors.csv")
-X = data["Population"].values.reshape(-1, 1)
-y = data["Visitors"].values.reshape(-1, 1)
-
-# Create a LinearRegression model and fit it to the data
-model = LinearRegression()
-model.fit(X, y)
+model = pickle.load(open("api/service/5_model_linear_regression", "rb"))
 
 
 def predict_visitors_with_population(population):
